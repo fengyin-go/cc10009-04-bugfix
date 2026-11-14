@@ -5,6 +5,7 @@ const Site = () => import('@/views/site/index.vue')
 const Template = () => import('@/views/template/index.vue')
 const Proxy = () => import('@/views/proxy/index.vue')
 const Spider = () => import('@/views/spider/index.vue')
+const Jobs = () => import('@/views/jobs/index.vue')
 const Schedule = () => import('@/views/schedule/index.vue')
 const Antibot = () => import('@/views/antibot/index.vue')
 const Ratelimit = () => import('@/views/ratelimit/index.vue')
@@ -28,6 +29,7 @@ const router = createRouter({
     { path: '/template', name: 'template', component: Template },
     { path: '/proxy', name: 'proxy', component: Proxy },
     { path: '/spider', name: 'spider', component: Spider },
+    { path: '/jobs', name: 'jobs', component: Jobs },
     { path: '/schedule', name: 'schedule', component: Schedule },
     { path: '/antibot', name: 'antibot', component: Antibot },
     { path: '/ratelimit', name: 'ratelimit', component: Ratelimit },

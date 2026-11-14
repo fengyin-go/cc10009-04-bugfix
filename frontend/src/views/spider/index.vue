@@ -18,6 +18,8 @@
       </article>
     </div>
 
+    <p v-if="noticeMessage" class="notice-text" data-testid="spider-notice">{{ noticeMessage }}</p>
+
     <p class="status-legend">
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
         {{ item.status }}：{{ item.count }}
@@ -51,6 +53,9 @@
               :key="action"
               class="link"
               type="button"
+              :class="{ 'link-muted': !canRun(action, row) }"
+              :title="canRun(action, row) ? action : `当前状态「${row.status}」不能${action}`"
+              :data-action="action"
               @click="runAction(action, row)"
             >
               {{ action }}
@@ -62,6 +67,8 @@
         </tr>
       </tbody>
     </table>
+
+    <JobRuntimePanel :version="runtimeVersion" />
 
     <footer class="page-foot">
       <span>共 {{ total }} 条采集任务记录</span>
@@ -79,17 +86,19 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import JobRuntimePanel from '@/components/JobRuntimePanel.vue'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('spider')
-const columns = ["作业编号", "目标站点", "抽取模板", "起始地址", "并发线程数", "请求间隔秒", "每日上限条数", "超时秒数"]
+const columns = ["作业编号", "目标站点", "抽取模板", "起始地址", "并发线程数", "请求间隔秒", "每日上限条数", "超时秒数", "当前批次", "已采集条数", "终止原因"]
 const actions = ["提交执行", "启动采集", "终止采集", "归档结果"]
 const statuses = ["草稿", "待执行", "运行中", "已完成", "已失败"]
-const stats = [{"label": "采集作业总数", "value": 0}, {"label": "运行中作业", "value": 0}, {"label": "已完成作业", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
+const noticeMessage = ref('')
+const runtimeVersion = ref(0)
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
 const statusSummary = computed(() =>
@@ -98,6 +107,16 @@ const statusSummary = computed(() =>
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+const stats = computed(() => [
+  { label: "采集作业总数", value: total.value },
+  { label: "运行中作业", value: rows.value.filter((row) => row.status === '运行中').length },
+  { label: "已完成作业", value: rows.value.filter((row) => row.status === '已完成').length },
+])
+
+/** 按作业状态机判断动作是否可点：草稿不能终止，失败批次也不能再归档。 */
+function canRun(action: string, row: EntryRow): boolean {
+  return Boolean(meta.transitions?.[action]?.includes(String(row.status)))
+}
 
 function resetFilters() {
   filters.value = {}
@@ -114,16 +133,23 @@ function openCreate() {
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
+  noticeMessage.value = ''
+  // 带上页面看到的状态，避免另一入口已改状态时这里按过期视图重复提交。
+  const result = applyAction(meta.key, Number(row.id), action, {
+    expectedStatus: String(row.status),
+    collectedCount: Number(row['已采集条数'] ?? 0),
+    reason: String(row['终止原因'] ?? ''),
+  })
   if (!result.ok) {
     errorMessage.value = result.message
+    reload()
     return
   }
+  noticeMessage.value = result.message
   reload()
 }
 
 function reload() {
-  errorMessage.value = ''
   try {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
@@ -131,6 +157,8 @@ function reload() {
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '采集任务列表读取失败'
   }
+  // 无论成功失败都刷新一次台账：另一业务面的运行中作业/失败批次要同步可见。
+  runtimeVersion.value += 1
 }
 
 onMounted(reload)

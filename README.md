@@ -46,6 +46,7 @@ npm run build
 | 抽取模板 | `template` | 网页模板 | 模板编号、入口地址、列表选择器 |
 | 代理池管理 | `proxy` | 代理节点 | 节点编号、代理地址、代理协议 |
 | 采集任务 | `spider` | 采集作业 | 作业编号、目标站点、抽取模板 |
+| 作业清单 | `jobs` | 作业运行台账 | 跨业务面的运行中作业、采集批次与异常结果 |
 | 调度策略 | `schedule` | 调度规则 | 规则编号、关联站点、调度表达式 |
 | 反爬对抗 | `antibot` | 对抗策略 | 策略编号、验证码类型、识别服务 |
 | 限速控制 | `ratelimit` | 限速配置 | 配置编号、目标站点、每秒请求上限 |
@@ -68,7 +69,12 @@ npm run build
 - 字段、状态、动作与流转目标集中在 `frontend/src/data/modules.ts`；示例数据在
   `frontend/src/data/seed.ts`。
 - 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
-- 想回到初始数据：清掉浏览器里 `scraper-config-studio:entries` 这一项，或调用 `resetModule(模块)`。
+- 采集作业与 RPA 流程共用作业状态机：`草稿 → 待执行/待校验 → 运行中/执行中 → 已失败或已完成`，
+  不允许跳级或回退；终止与归档都以运行中为唯一入口，先到的合法状态生效。
+- 作业批次、失败批次的异常记录和流转历史保存在 `scraper-config-studio:runtime`，
+  和业务数据分仓；终止/归档只复用同一条批次，刷新或重开浏览器不会另起作业。
+- 想回到初始数据：清掉浏览器里 `scraper-config-studio:entries` 与
+  `scraper-config-studio:runtime` 这两项，或调用 `resetModule(模块)`。
 
 领域：数据工程
 子方向：数据采集、爬虫与RPA

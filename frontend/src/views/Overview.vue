@@ -15,6 +15,7 @@
         <strong class="stat-value">{{ card.value }}</strong>
       </article>
     </div>
+    <JobRuntimePanel :version="runtimeVersion" />
     <table class="data-table">
       <thead>
         <tr><th>业务模块</th><th>今日新增</th><th>待处理</th><th>异常量</th></tr>
@@ -38,15 +39,18 @@
 import { onMounted, ref } from 'vue'
 
 import { loadOverview } from '@/api/local-service'
+import JobRuntimePanel from '@/components/JobRuntimePanel.vue'
 import type { OverviewResult } from '@/data/types'
 
 const cards = ref<OverviewResult['cards']>([])
 const moduleRows = ref<OverviewResult['modules']>([])
+const runtimeVersion = ref(0)
 
 function refresh() {
   const payload = loadOverview()
   cards.value = payload.cards
   moduleRows.value = payload.modules
+  runtimeVersion.value += 1
 }
 
 onMounted(refresh)

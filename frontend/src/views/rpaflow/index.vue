@@ -24,6 +24,8 @@
       </span>
     </p>
 
+    <p v-if="noticeMessage" class="notice-text" data-testid="rpaflow-notice">{{ noticeMessage }}</p>
+
     <form class="filter-bar" @submit.prevent="reload">
       <label v-for="field in filterFields" :key="field" class="filter-item">
         <span>{{ field }}</span>
@@ -51,6 +53,9 @@
               :key="action"
               class="link"
               type="button"
+              :class="{ 'link-muted': !canRun(action, row) }"
+              :title="canRun(action, row) ? action : `当前状态「${row.status}」不能${action}`"
+              :data-action="action"
               @click="runAction(action, row)"
             >
               {{ action }}
@@ -62,6 +67,8 @@
         </tr>
       </tbody>
     </table>
+
+    <JobRuntimePanel :version="runtimeVersion" />
 
     <footer class="page-foot">
       <span>共 {{ total }} 条RPA流程记录</span>
@@ -79,17 +86,19 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import JobRuntimePanel from '@/components/JobRuntimePanel.vue'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('rpaflow')
-const columns = ["流程编号", "目标页面", "操作序列", "等待条件", "超时秒数", "结果提取", "异常回滚", "执行批次"]
+const columns = ["流程编号", "目标页面", "操作序列", "等待条件", "超时秒数", "结果提取", "异常回滚", "执行批次", "已采集条数", "终止原因"]
 const actions = ["提交执行", "启动流程", "终止流程", "归档结果"]
 const statuses = ["草稿", "待校验", "执行中", "已完成", "已失败"]
-const stats = [{"label": "自动化流程总数", "value": 0}, {"label": "执行中流程", "value": 0}, {"label": "已完成流程", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
+const noticeMessage = ref('')
+const runtimeVersion = ref(0)
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
 const statusSummary = computed(() =>
@@ -98,6 +107,16 @@ const statusSummary = computed(() =>
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+const stats = computed(() => [
+  { label: "自动化流程总数", value: total.value },
+  { label: "执行中流程", value: rows.value.filter((row) => row.status === '执行中').length },
+  { label: "已完成流程", value: rows.value.filter((row) => row.status === '已完成').length },
+])
+
+/** RPA 业务面与采集作业共用同一套状态机口径。 */
+function canRun(action: string, row: EntryRow): boolean {
+  return Boolean(meta.transitions?.[action]?.includes(String(row.status)))
+}
 
 function resetFilters() {
   filters.value = {}
@@ -114,16 +133,22 @@ function openCreate() {
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
+  noticeMessage.value = ''
+  const result = applyAction(meta.key, Number(row.id), action, {
+    expectedStatus: String(row.status),
+    collectedCount: Number(row['已采集条数'] ?? 0),
+    reason: String(row['终止原因'] ?? ''),
+  })
   if (!result.ok) {
     errorMessage.value = result.message
+    reload()
     return
   }
+  noticeMessage.value = result.message
   reload()
 }
 
 function reload() {
-  errorMessage.value = ''
   try {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
@@ -131,6 +156,8 @@ function reload() {
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'RPA流程列表读取失败'
   }
+  // 同步刷新台账：采集任务侧的运行中作业与失败批次也要在这个入口可见。
+  runtimeVersion.value += 1
 }
 
 onMounted(reload)
